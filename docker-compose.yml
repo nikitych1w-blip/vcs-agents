@@ -1,0 +1,97 @@
+name: vcs-agents
+
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    user: root
+    command: server start-dev --ip 0.0.0.0 --db-filename /temporal-data/temporal.db --log-level warn
+    ports:
+      - "7233:7233"   # gRPC frontend
+      - "8233:8233"   # Web UI
+    volumes:
+      - temporal-data:/temporal-data
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "namespace", "list", "--address", "127.0.0.1:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  litellm-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD}
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    command: ["--config", "/app/config.yml"]
+    ports:
+      - "4000:4000"   # OpenAI-compatible API + dashboard at /ui
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm-db:5432/litellm
+      AI_HUB_SBT_KEY: ${AI_HUB_SBT_KEY}
+      PYTHONHTTPSVERIFY: "0"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+    volumes:
+      - ./litellm/config.yaml:/app/config.yml:ro
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_API_KEY: ${LITELLM_WORKER_KEY:-${LITELLM_MASTER_KEY}}
+      GITEA_BASE_URL: ${GITEA_BASE_URL:-}
+      GITEA_TOKEN: ${GITEA_TOKEN:-}
+      VAULT_REPO: ${VAULT_REPO:-vcs-vault}
+      VAULT_REF: ${VAULT_REF:-main}
+      API_REPO: ${API_REPO:-vcs-api}
+      API_REF: ${API_REF:-main}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+volumes:
+  temporal-data:
+  litellm-db-data:
+
+networks:
+  pipeline-net:
+    name: pipeline-net

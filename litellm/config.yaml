@@ -1,0 +1,18 @@
+model_list:
+  - model_name: company-main
+    litellm_params:
+      model: openai/Qwen/Qwen3-Coder-30B-A3B-Instruct
+      api_base: https://api.ai.sbt/openai/v1
+      api_key: os.environ/AI_HUB_SBT_KEY
+
+router_settings:
+  num_retries: 2
+
+litellm_settings:
+  drop_params: true
+  ssl_verify: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
