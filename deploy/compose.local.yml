@@ -8,17 +8,13 @@ services:
       - auth2api-data:/data
       - ../configs/auth2api/config.generated.yaml:/config/config.yaml:ro
     networks: [pipeline-net]
+    restart: on-failure
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8317/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8317/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
       start_period: 5s
-
-  litellm:
-    depends_on:
-      auth2api:
-        condition: service_healthy
 
 volumes:
   auth2api-data:

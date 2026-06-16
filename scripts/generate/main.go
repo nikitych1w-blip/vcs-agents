@@ -211,7 +211,7 @@ func genLiteLLM(cfg Config, env string) (string, error) {
 func genAuth2API(cfg Config, env string) (string, error) {
 	a := cfg.Auth2API
 	out := auth2APIOut{
-		Host:    "",
+		Host:    "0.0.0.0",
 		Port:    a.Port,
 		AuthDir: "/data",
 		APIKeys: []string{a.APIKey},
@@ -303,7 +303,7 @@ func build(cfg Config, env, root string) ([]artifact, error) {
 
 	arts := []artifact{
 		{filepath.Join(base, "litellm", "config.generated.yaml"), ll},
-		{filepath.Join(base, "opencode", "opencode.generated.json"), oc},
+		{filepath.Join(root, "opencode.json"), oc},
 	}
 
 	if cfg.Auth2API != nil {

@@ -5,3 +5,4 @@
 
 # генерируется из config.yml — make generate / make generate-local
 configs/
+opencode.json

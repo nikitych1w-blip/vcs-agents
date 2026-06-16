@@ -1,9 +1,11 @@
 D      = deploy
 C      = docker compose
-PROD   = -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml -f $(D)/compose.execution.yml
-LOCAL  = $(PROD) -f $(D)/compose.local.yml
-INFRA  = -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml
-MCP    = -f $(D)/compose.mcp.yml
+EF     = --env-file .env.$(or $(ENV),prod)
+PROD   = $(EF) -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml
+LOCAL  = --env-file .env.local -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml -f $(D)/compose.local.yml
+EXEC   = $(EF) -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml -f $(D)/compose.execution.yml
+INFRA  = $(EF) -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml
+MCP    = $(EF) -f $(D)/compose.mcp.yml
 
 .PHONY: bootstrap bootstrap-local \
         up up-local down down-local logs ps \
@@ -69,18 +71,18 @@ vault-logs:     ## логи vault-mcp
 	$(C) $(MCP) logs -f --tail=100 vault-mcp
 
 worker-up:      ## пересобрать и поднять worker
-	$(C) $(PROD) up -d --build worker
+	$(C) $(EXEC) up -d --build worker
 
 worker-down:    ## остановить worker
-	$(C) $(PROD) stop worker
+	$(C) $(EXEC) stop worker
 
 # ── auth2api ──────────────────────────────────────────────────────────────────
 
-auth2api-login: ## войти в Claude (OAuth → браузер)
-	$(C) $(LOCAL) run --rm -it auth2api node dist/index.js --login --config=/config/config.yaml
+auth2api-login: ## войти в Claude (OAuth → браузер, нативно)
+	bash scripts/auth2api-login.sh anthropic
 
-auth2api-login-codex: ## войти в Codex/ChatGPT (OAuth → браузер)
-	$(C) $(LOCAL) run --rm -it auth2api node dist/index.js --login --provider=codex --config=/config/config.yaml
+auth2api-login-codex: ## войти в Codex/ChatGPT (OAuth → браузер, нативно)
+	bash scripts/auth2api-login.sh codex
 
 auth2api-status: ## статус аккаунтов auth2api
 	$(C) $(LOCAL) exec auth2api wget -qO- \
@@ -96,10 +98,10 @@ bootstrap-local:    ## первый запуск локального окруж
 	bash scripts/bootstrap.sh local
 
 generate:       ## сгенерировать configs/ из config.prod.yml
-	go run ./scripts/generate/ ENV=prod
+	cd scripts/generate && go run . ENV=prod
 
 generate-local: ## сгенерировать configs/ из config.local.yml
-	go run ./scripts/generate/ ENV=local
+	cd scripts/generate && go run . ENV=local
 
 opencode:       ## opencode с прод-окружением (.env.prod)
 	env $$(grep -v '^[#$$]' .env.prod | xargs) opencode

@@ -42,40 +42,41 @@ if [[ ! -f "$ENV_FILE" ]]; then
   fi
 fi
 
-# ── 3. проверка незаполненных переменных ──────────────────────────────────────
+# ── 3. загрузка и проверка переменных ────────────────────────────────────────
 
 info "проверяю переменные в ${ENV_FILE}..."
 
-# Переменные которые должны быть заполнены (не CHANGE-ME, не пустые)
-if [[ "$ENV" == "prod" ]]; then
-  REQUIRED_VARS=(
-    LITELLM_MASTER_KEY LITELLM_SALT_KEY LITELLM_DB_PASSWORD
-    SBT_API_BASE_URL AI_HUB_SBT_KEY
-    VAULT_MCP_URL VAULT_MCP_TOKEN
-    LITELLM_BASE_URL LITELLM_MCP_URL
-    TEMPORAL_ADDRESS WORKER_LITELLM_BASE_URL
-  )
-else
-  REQUIRED_VARS=(
-    LITELLM_MASTER_KEY LITELLM_SALT_KEY LITELLM_DB_PASSWORD
-    SBT_API_BASE_URL AI_HUB_SBT_KEY
-    VAULT_LOCAL_PATH VAULT_LOCAL_MCP_URL AUTH2API_BASE_URL
-    LITELLM_BASE_URL LITELLM_MCP_URL
-    TEMPORAL_ADDRESS WORKER_LITELLM_BASE_URL
-  )
-fi
-
-MISSING=()
 while IFS= read -r line; do
   [[ "$line" =~ ^#|^$ ]] && continue
   export "$line" 2>/dev/null || true
 done < "$ENV_FILE"
 
+# Internal ключи — генерируем если не заданы, не требуем от пользователя
+_autofill() {
+  local var="$1" prefix="$2"
+  local val="${!var:-}"
+  if [[ -z "$val" || "$val" == *"CHANGE-ME"* ]]; then
+    local new="${prefix}-$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 16)"
+    sed -i.bak "s|^${var}=.*|${var}=${new}|" "$ENV_FILE" && rm -f "${ENV_FILE}.bak"
+    export "$var"="$new"
+    warn "${var} не задан — сгенерирован автоматически"
+  fi
+}
+_autofill LITELLM_MASTER_KEY "sk-master"
+_autofill LITELLM_SALT_KEY   "sk-salt"
+_autofill LITELLM_DB_PASSWORD "litellm"
+
+# Внешние секреты — должны быть заполнены пользователем
+if [[ "$ENV" == "prod" ]]; then
+  REQUIRED_VARS=(AI_HUB_SBT_KEY VAULT_MCP_URL VAULT_MCP_TOKEN)
+else
+  REQUIRED_VARS=(AI_HUB_SBT_KEY VAULT_LOCAL_PATH)
+fi
+
+MISSING=()
 for var in "${REQUIRED_VARS[@]}"; do
   val="${!var:-}"
-  if [[ -z "$val" || "$val" == *"CHANGE-ME"* ]]; then
-    MISSING+=("$var")
-  fi
+  [[ -z "$val" || "$val" == *"CHANGE-ME"* ]] && MISSING+=("$var")
 done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
@@ -107,6 +108,23 @@ else
   make up
 fi
 success "контейнеры запущены"
+
+# ── 5a. проверка auth2api (только local) ──────────────────────────────────────
+
+if [[ "$ENV" == "local" ]]; then
+  sleep 3
+  if ! docker ps --filter "name=auth2api" --filter "status=running" | grep -q auth2api; then
+    echo ""
+    warn "auth2api не запустился — нужно войти в Claude (один раз):"
+    echo ""
+    echo "    make auth2api-login"
+    echo ""
+    info "после авторизации auth2api поднимется автоматически (restart: on-failure)"
+    echo ""
+  else
+    success "auth2api запущен"
+  fi
+fi
 
 # ── 6. ожидание litellm ───────────────────────────────────────────────────────
 
