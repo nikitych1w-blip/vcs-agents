@@ -11,15 +11,21 @@
       },
       "models": {
         "company-main": {
-          "name": "Qwen3 Coder 30B (via LiteLLM)"
+          "name": "Qwen3 Coder Next"
+        },
+        "company-large": {
+          "name": "Qwen3.5 397B"
+        },
+        "gigachat-max": {
+          "name": "GigaChat-2-Max"
         }
       }
     }
   },
   "mcp": {
-    "vault": {
+    "litellm": {
       "type": "remote",
-      "url": "http://localhost:4000/mcp",
+      "url": "http://localhost:4000/mcp/",
       "enabled": true,
       "headers": {
         "x-litellm-api-key": "Bearer {env:LITELLM_API_KEY}"

@@ -1,12 +1,24 @@
 model_list:
   - model_name: company-main
     litellm_params:
-      model: openai/Qwen/Qwen3-Coder-30B-A3B-Instruct
+      model: openai/Qwen/Qwen3-Coder-Next
+      api_base: https://api.ai.sbt/openai/v1
+      api_key: os.environ/AI_HUB_SBT_KEY
+
+  - model_name: company-large
+    litellm_params:
+      model: openai/Qwen/Qwen3.5-397B-A17B
+      api_base: https://api.ai.sbt/openai/v1
+      api_key: os.environ/AI_HUB_SBT_KEY
+
+  - model_name: gigachat-max
+    litellm_params:
+      model: openai/GigaChat-2-Max
       api_base: https://api.ai.sbt/openai/v1
       api_key: os.environ/AI_HUB_SBT_KEY
 
 mcp_servers:
-  - server_name: vault_mcp
+  vault_mcp:
     url: "http://vault-mcp:8080/mcp"
     transport: http
     auth_type: none
