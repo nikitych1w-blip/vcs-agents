@@ -1,0 +1,28 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      GITEA_BASE_URL: ${GITEA_BASE_URL:-}
+      GITEA_TOKEN: ${GITEA_TOKEN:-}
+      VAULT_REPO: ${VAULT_REPO:-vcs-vault}
+      VAULT_REF: ${VAULT_REF:-main}
+      API_REPO: ${API_REPO:-vcs-api}
+      API_REF: ${API_REF:-main}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+networks:
+  pipeline-net:
+    name: pipeline-net

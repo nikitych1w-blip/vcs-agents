@@ -1,0 +1,22 @@
+host: ""
+port: 8317
+auth-dir: "/data"
+
+# Ключ, которым litellm аутентифицируется к этому прокси
+api-keys:
+  - "auth2api-internal-key"
+
+timeouts:
+  messages-ms: 120000
+  stream-messages-ms: 600000
+  count-tokens-ms: 30000
+
+stats:
+  enabled: true
+
+debug: "off"
+
+# Версия CLI совпадает с установленной на хосте
+cloaking:
+  cli-version: "2.1.153"
+  entrypoint: "cli"

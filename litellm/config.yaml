@@ -17,6 +17,18 @@ model_list:
       api_base: https://api.ai.sbt/openai/v1
       api_key: os.environ/AI_HUB_SBT_KEY
 
+  - model_name: claude-sonnet
+    litellm_params:
+      model: openai/claude-sonnet-4-6
+      api_base: http://auth2api:8317/v1
+      api_key: auth2api-internal-key
+
+  - model_name: claude-opus
+    litellm_params:
+      model: openai/claude-opus-4-7
+      api_base: http://auth2api:8317/v1
+      api_key: auth2api-internal-key
+
 mcp_servers:
   vault_mcp:
     url: "http://vault-mcp:8080/mcp"

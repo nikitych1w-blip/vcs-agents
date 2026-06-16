@@ -1,0 +1,23 @@
+services:
+  vault-mcp:
+    build:
+      context: ./mcp/vcs-vault-local
+      dockerfile: Dockerfile
+    environment:
+      VAULT_ROOT: /vault
+      PORT: "8080"
+    volumes:
+      - ${VAULT_LOCAL_PATH}:/vault:ro
+    ports:
+      - "8080:8080"
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+networks:
+  pipeline-net:
+    name: pipeline-net

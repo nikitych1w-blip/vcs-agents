@@ -18,6 +18,12 @@
         },
         "gigachat-max": {
           "name": "GigaChat-2-Max"
+        },
+        "claude-sonnet": {
+          "name": "Claude Sonnet 4.6"
+        },
+        "claude-opus": {
+          "name": "Claude Opus 4.7"
         }
       }
     }
