@@ -5,7 +5,8 @@ LOCAL  = $(PROD) -f $(D)/compose.local.yml
 INFRA  = -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml
 MCP    = -f $(D)/compose.mcp.yml
 
-.PHONY: up up-local down down-local logs ps \
+.PHONY: bootstrap bootstrap-local \
+        up up-local down down-local logs ps \
         infra-up infra-down infra-logs \
         mcp-up mcp-down mcp-logs \
         vault-up vault-down vault-logs \
@@ -87,6 +88,12 @@ auth2api-status: ## статус аккаунтов auth2api
 	  http://localhost:8317/admin/accounts
 
 # ── конфиги ───────────────────────────────────────────────────────────────────
+
+bootstrap:          ## первый запуск прод-окружения
+	bash scripts/bootstrap.sh prod
+
+bootstrap-local:    ## первый запуск локального окружения
+	bash scripts/bootstrap.sh local
 
 generate:       ## сгенерировать configs/ из config.prod.yml
 	go run ./scripts/generate/ ENV=prod

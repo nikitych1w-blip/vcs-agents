@@ -1,87 +1,41 @@
-# vcs-agents — local control-plane
+# vcs-agents
 
-Docker Compose for the **inference control-plane** of `vcs-agents`. First run brings up the
-spine; observability and the worker are opt-in so you don't pay for the whole stack on day one.
+Докер-окружение для запуска AI-агентов над VCS. LiteLLM проксирует все запросы к моделям, Temporal оркестрирует воркеры, vault-MCP даёт агентам доступ к кодовой базе.
 
-What this is **not**: it doesn't run your product (prod SourceControl is an external hub the
-worker talks to), and it doesn't run `vcs-sandbox` (that's a separate ephemeral, per-run compose).
+## Запуск
 
-## Layout
-
-| File | What |
-|---|---|
-| `docker-compose.yml` | Core: Temporal dev server + LiteLLM (+ Postgres). Plus a `worker` profile. |
-| `docker-compose.observability.yml` | Optional Langfuse v3 overlay (+6 containers). |
-| `litellm/config.yaml` | Model aliases, routing, fallbacks. |
-| `.env.example` | All secrets/config. Copy to `.env`. |
-| `Makefile` | `up` / `down` / `logs` / `obs-up` / `worker-up` / `clean`. |
-
-## First run
+Скопируй нужный `.env.*.example` в `.env.local` или `.env.prod`, заполни `CHANGE-ME` и:
 
 ```bash
-cp ..env.example .env        # then edit: set LITELLM_MASTER_KEY, LITELLM_SALT_KEY,
-                            # LITELLM_DB_PASSWORD, and at least one provider key
-make up                     # or: docker compose up -d
+./scripts/bootstrap.sh local   # или prod
 ```
 
-Brings up:
-- **Temporal** — UI at http://localhost:8233, gRPC at `localhost:7233` (workers connect here)
-- **LiteLLM** — OpenAI-compatible endpoint at http://localhost:4000, dashboard at `/ui`
+Скрипт проверит переменные, сгенерирует конфиги, поднимет стек и создаст API-ключ для LiteLLM.
 
-Verify:
+После первого запуска в локальном окружении нужно один раз войти в Claude:
 
 ```bash
-docker compose ps                                   # both healthy
-curl http://localhost:4000/health/liveliness        # -> alive
-# a real model call through the gateway (use a model_name from litellm/config.yml):
-curl http://localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-main","messages":[{"role":"user","content":"ping"}]}'
+make auth2api-login
 ```
 
-Open http://localhost:8233 — Temporal UI, empty namespace `default` ready for workflows.
+Дальше запускай opencode через `make opencode-local` — он подхватит нужные переменные.
 
-## Add the worker (when you have code)
+## Окружения
 
-The `worker` service builds from a `Dockerfile` in the repo (should build `cmd/worker`). Once
-that exists:
+**local** — для разработки. Claude Sonnet по умолчанию через auth2api (работает на OAuth-сессии Claude Code, без API-ключа). Vault читает из локальной папки.
 
-```bash
-make worker-up        # docker compose --profile worker up -d --build
-```
+**prod** — компанийские модели через SBT AI Hub. Vault подключается к удалённому MCP.
 
-It connects to `temporal:7233` and calls models via `http://litellm:4000`. Env contract is in
-`docker-compose.yml` (Temporal address, LiteLLM base/key, Gitea hub + token, pinned vault/api refs).
+Конфигурация окружений живёт в `config.local.yml` и `config.prod.yml`. Всё остальное (litellm config, opencode json, auth2api config) генерируется из них через `make generate[-local]`. Сгенерированное в git не кладётся.
 
-## Add observability (Langfuse) — heavy, opt-in
+## Модели
 
-~8 GB RAM, 6 extra containers. Start with LiteLLM's own spend/metrics first; add Langfuse when
-you need step-level tracing of pipeline runs.
+Список моделей и их роутинг — в `config.*.yml`. Добавил модель — перегенерировал — перезапустил litellm. Переключаться между моделями можно прямо в opencode через `/model`.
 
-```bash
-make obs-up           # core + Langfuse
-```
+## Заметки
 
-Then: open http://localhost:3000 → create org/project → copy the API keys into `.env`
-(`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`), uncomment `success_callback: ["langfuse"]` in
-`litellm/config.yaml`, and `docker compose restart litellm`. Point the worker's
-`OTEL_EXPORTER_OTLP_ENDPOINT` at Langfuse's OTLP ingest to get task→step→call spans.
+Temporal здесь dev-сервер на SQLite — нормально для локала, для настоящего прода нужен отдельный Postgres.
 
-> The overlay mirrors Langfuse's official self-host compose; image tags are loose on purpose.
-> Pin them against the current file at https://langfuse.com/self-hosting before relying on it.
+auth2api — неофициальный прокси поверх Claude Code. Удобно, но может сломаться при обновлении CLI. Если нужна стабильность — бери API-ключ на platform.anthropic.com.
 
-## Notes that will bite later if ignored
-
-- **Pin image tags.** `temporalio/temporal:latest`, `litellm:main-stable`, `langfuse:3` are fine
-  for first run; pin exact versions for reproducibility. For LiteLLM, avoid `1.82.7`/`1.82.8`
-  (Mar-2026 supply-chain); use a clean tag.
-- **Temporal here is a dev server** (in-process SQLite). Great for local. For a persistent /
-  prod-shaped control-plane, swap to `temporalio/auto-setup` + a dedicated Postgres.
-- **Bot identity.** `GITEA_TOKEN` is a service account on prod SourceControl: read `vcs-vault` /
-  `vcs-api`, write-PR to the product repo, **no** merge to main, no admin. Don't use your
-  personal token — runs and permissions get tangled.
-- **Reproducibility.** Pin `VAULT_REF` / `API_REF` to commit SHAs and record them per run, so a
-  run = (vcs-agents version) × (vault ref) × (api ref) × (sandbox image) × (prod-hub version).
-- **`host.docker.internal`** (for a local vLLM/Ollama later) works on Docker Desktop; on plain
-  Linux add `extra_hosts: ["host.docker.internal:host-gateway"]` to the litellm service.
+`LITELLM_API_KEY` в `.env` — это виртуальный ключ, который setup.sh создаёт через LiteLLM API. Он нужен opencode и воркеру. Мастер-ключ (`LITELLM_MASTER_KEY`) никуда наружу не торчит.
