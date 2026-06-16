@@ -1,6 +1,0 @@
-name: vcs-agents
-
-include:
-  - compose.infra.yml
-  - compose.mcp.yml
-  - compose.execution.yml

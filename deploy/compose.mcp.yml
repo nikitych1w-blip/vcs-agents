@@ -1,7 +1,7 @@
 services:
   vault-mcp:
     build:
-      context: ./mcp/vcs-vault-local
+      context: ../mcp/vcs-vault-local
       dockerfile: Dockerfile
     environment:
       VAULT_ROOT: /vault

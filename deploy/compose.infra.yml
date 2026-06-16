@@ -37,18 +37,26 @@ services:
     ports:
       - "4000:4000"
     environment:
+      # ── LiteLLM core ────────────────────────────────────────────
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm-db:5432/litellm
-      AI_HUB_SBT_KEY: ${AI_HUB_SBT_KEY}
       PYTHONHTTPSVERIFY: "0"
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # ── SBT AI Hub ──────────────────────────────────────────────
+      SBT_API_BASE_URL: ${SBT_API_BASE_URL}
+      AI_HUB_SBT_KEY: ${AI_HUB_SBT_KEY}
+      # ── auth2api (local only, пустая строка в prod) ─────────────
+      AUTH2API_BASE_URL: ${AUTH2API_BASE_URL:-}
+      # ── Vault MCP ───────────────────────────────────────────────
+      VAULT_LOCAL_MCP_URL: ${VAULT_LOCAL_MCP_URL:-}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-}
+      VAULT_MCP_TOKEN: ${VAULT_MCP_TOKEN:-}
+      # ── Observability ───────────────────────────────────────────
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
     volumes:
-      - ./litellm/config.yaml:/app/config.yml:ro
+      - ../configs/litellm/config.generated.yaml:/app/config.yml:ro
     depends_on:
       litellm-db:
         condition: service_healthy
@@ -66,11 +74,11 @@ services:
 
   auth2api:
     build:
-      context: ./auth2api
+      context: ../auth2api
       dockerfile: Dockerfile
     volumes:
       - auth2api-data:/data
-      - ./auth2api/config.yaml:/config/config.yaml:ro
+      - ../configs/auth2api/config.generated.yaml:/config/config.yaml:ro
     networks: [pipeline-net]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8317/health || exit 1"]

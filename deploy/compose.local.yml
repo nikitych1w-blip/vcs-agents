@@ -1,0 +1,28 @@
+# Локальное окружение: добавляет auth2api и подключает его к litellm
+services:
+  auth2api:
+    build:
+      context: ../auth2api
+      dockerfile: Dockerfile
+    volumes:
+      - auth2api-data:/data
+      - ../configs/auth2api/config.generated.yaml:/config/config.yaml:ro
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8317/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  litellm:
+    depends_on:
+      auth2api:
+        condition: service_healthy
+
+volumes:
+  auth2api-data:
+
+networks:
+  pipeline-net:
+    name: pipeline-net

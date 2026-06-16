@@ -1,0 +1,98 @@
+# Локальное окружение — Claude через auth2api, локальный vault
+# Генерация: make generate-local
+
+default_model: claude-sonnet
+
+# ─── Модели ──────────────────────────────────────────────────────────────────
+models:
+  company-main:
+    display: Qwen3 Coder Next
+    provider: sbt
+    upstream: openai/Qwen/Qwen3-Coder-Next
+
+  company-large:
+    display: "Qwen3.5 397B"
+    provider: sbt
+    upstream: openai/Qwen/Qwen3.5-397B-A17B
+
+  gigachat-max:
+    display: GigaChat-2-Max
+    provider: sbt
+    upstream: openai/GigaChat-2-Max
+
+  claude-sonnet:
+    display: Claude Sonnet 4.6
+    provider: auth2api
+    upstream: openai/claude-sonnet-4-6
+
+  claude-opus:
+    display: Claude Opus 4.7
+    provider: auth2api
+    upstream: openai/claude-opus-4-7
+
+# ─── Провайдеры ──────────────────────────────────────────────────────────────
+providers:
+  sbt:
+    api_base_env: SBT_API_BASE_URL
+    api_key_env: AI_HUB_SBT_KEY
+
+  auth2api:
+    api_base_env: AUTH2API_BASE_URL
+    api_key: auth2api-internal-key
+
+# ─── MCP ─────────────────────────────────────────────────────────────────────
+mcp:
+  vault:
+    url_env: VAULT_LOCAL_MCP_URL
+    transport: http
+    auth_type: none
+
+# ─── LiteLLM gateway ─────────────────────────────────────────────────────────
+litellm:
+  router:
+    num_retries: 2
+  settings:
+    drop_params: true
+    ssl_verify: false
+  general:
+    master_key_env: LITELLM_MASTER_KEY
+    salt_key_env: LITELLM_SALT_KEY
+    database_url_env: DATABASE_URL
+    store_model_in_db: true
+  observability:
+    langfuse:
+      public_key_env: LANGFUSE_PUBLIC_KEY
+      secret_key_env: LANGFUSE_SECRET_KEY
+      host_env: LANGFUSE_HOST
+
+# ─── OpenCode ────────────────────────────────────────────────────────────────
+opencode:
+  litellm_base_url_env: LITELLM_BASE_URL
+  litellm_api_key_env: LITELLM_API_KEY
+  litellm_mcp_url_env: LITELLM_MCP_URL
+
+# ─── auth2api (Claude OAuth прокси) ──────────────────────────────────────────
+auth2api:
+  port: 8317
+  api_key: auth2api-internal-key
+  timeouts:
+    messages_ms: 120000
+    stream_messages_ms: 600000
+    count_tokens_ms: 30000
+  cloaking:
+    cli_version: "2.1.153"
+    entrypoint: cli
+
+# ─── Worker ──────────────────────────────────────────────────────────────────
+worker:
+  temporal_address_env: TEMPORAL_ADDRESS
+  temporal_namespace: default
+  litellm_base_url_env: WORKER_LITELLM_BASE_URL
+  litellm_api_key_env: LITELLM_MASTER_KEY
+  vault_repo: vcs-vault
+  vault_ref: main
+  api_repo: vcs-api
+  api_ref: main
+  gitea_base_url_env: GITEA_BASE_URL
+  gitea_token_env: GITEA_TOKEN
+  otel_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT

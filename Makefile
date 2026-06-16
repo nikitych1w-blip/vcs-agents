@@ -1,98 +1,107 @@
-COMPOSE           = docker compose
-COMPOSE_INFRA     = $(COMPOSE) -f compose.infra.yml -f compose.mcp.yml
-COMPOSE_MCP       = $(COMPOSE) -f compose.mcp.yml
-COMPOSE_EXECUTION = $(COMPOSE) -f compose.infra.yml -f compose.mcp.yml -f compose.execution.yml
+D      = deploy
+C      = docker compose
+PROD   = -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml -f $(D)/compose.execution.yml
+LOCAL  = $(PROD) -f $(D)/compose.local.yml
+INFRA  = -f $(D)/compose.infra.yml -f $(D)/compose.mcp.yml
+MCP    = -f $(D)/compose.mcp.yml
 
-.PHONY: up down logs ps \
+.PHONY: up up-local down down-local logs ps \
         infra-up infra-down infra-logs \
         mcp-up mcp-down mcp-logs \
+        vault-up vault-down vault-logs \
         worker-up worker-down \
         auth2api-login auth2api-login-codex auth2api-status \
-        vault-up vault-down vault-logs \
-        clean sync-models validate-models install-hooks help
+        generate generate-local \
+        opencode opencode-local \
+        clean help
 
-# ── полный стек ────────────────────────────────────────────────
+# ── стек ──────────────────────────────────────────────────────────────────────
 
-up:            ## поднять всё
-	$(COMPOSE) up -d
+up:             ## поднять прод-стек
+	$(C) $(PROD) up -d
 
-down:          ## остановить всё
-	$(COMPOSE) down
+up-local:       ## поднять локальный стек (+ auth2api)
+	$(C) $(LOCAL) up -d
 
-logs:          ## логи всех сервисов
-	$(COMPOSE) logs -f --tail=100
+down:           ## остановить прод-стек
+	$(C) $(PROD) down
 
-ps:            ## статус контейнеров
-	$(COMPOSE) ps
+down-local:     ## остановить локальный стек
+	$(C) $(LOCAL) down
 
-# ── инфра (temporal, litellm-db, litellm, auth2api) ───────────
+logs:           ## логи всех сервисов
+	$(C) $(PROD) logs -f --tail=100
 
-infra-up:      ## поднять инфра-слой (+ mcp как зависимость litellm)
-	$(COMPOSE_INFRA) up -d
+ps:             ## статус контейнеров
+	$(C) $(PROD) ps
 
-infra-down:    ## остановить инфра-слой
-	$(COMPOSE_INFRA) down
+clean:          ## снести всё включая volumes
+	$(C) $(LOCAL) down -v
 
-infra-logs:    ## логи инфра-слоя
-	$(COMPOSE_INFRA) logs -f --tail=100
+# ── слои ──────────────────────────────────────────────────────────────────────
 
-# ── MCP серверы ────────────────────────────────────────────────
+infra-up:       ## поднять инфра-слой
+	$(C) $(INFRA) up -d
 
-mcp-up:        ## поднять MCP серверы
-	$(COMPOSE_MCP) up -d --build
+infra-down:     ## остановить инфра-слой
+	$(C) $(INFRA) down
 
-mcp-down:      ## остановить MCP серверы
-	$(COMPOSE_MCP) stop
+infra-logs:     ## логи инфра-слоя
+	$(C) $(INFRA) logs -f --tail=100
 
-mcp-logs:      ## логи MCP серверов
-	$(COMPOSE_MCP) logs -f --tail=100
+mcp-up:         ## поднять MCP серверы
+	$(C) $(MCP) up -d --build
 
-vault-up:      ## пересобрать и поднять vault-mcp
-	$(COMPOSE_MCP) up -d --build vault-mcp
+mcp-down:       ## остановить MCP серверы
+	$(C) $(MCP) stop
 
-vault-down:    ## остановить vault-mcp
-	$(COMPOSE_MCP) stop vault-mcp
+mcp-logs:       ## логи MCP серверов
+	$(C) $(MCP) logs -f --tail=100
 
-vault-logs:    ## логи vault-mcp
-	$(COMPOSE_MCP) logs -f --tail=100 vault-mcp
+vault-up:       ## пересобрать vault-mcp
+	$(C) $(MCP) up -d --build vault-mcp
 
-# ── воркер ────────────────────────────────────────────────────
+vault-down:     ## остановить vault-mcp
+	$(C) $(MCP) stop vault-mcp
 
-worker-up:     ## поднять worker (пересборка)
-	$(COMPOSE_EXECUTION) up -d --build worker
+vault-logs:     ## логи vault-mcp
+	$(C) $(MCP) logs -f --tail=100 vault-mcp
 
-worker-down:   ## остановить worker
-	$(COMPOSE_EXECUTION) stop worker
+worker-up:      ## пересобрать и поднять worker
+	$(C) $(PROD) up -d --build worker
 
-# ── auth2api ──────────────────────────────────────────────────
+worker-down:    ## остановить worker
+	$(C) $(PROD) stop worker
 
-auth2api-login: ## войти в Claude аккаунт (откроет ссылку — пройти OAuth в браузере)
-	$(COMPOSE) run --rm -it auth2api node dist/index.js --login --config=/config/config.yaml
+# ── auth2api ──────────────────────────────────────────────────────────────────
 
-auth2api-login-codex: ## войти в ChatGPT/Codex аккаунт
-	$(COMPOSE) run --rm -it auth2api node dist/index.js --login --provider=codex --config=/config/config.yaml
+auth2api-login: ## войти в Claude (OAuth → браузер)
+	$(C) $(LOCAL) run --rm -it auth2api node dist/index.js --login --config=/config/config.yaml
+
+auth2api-login-codex: ## войти в Codex/ChatGPT (OAuth → браузер)
+	$(C) $(LOCAL) run --rm -it auth2api node dist/index.js --login --provider=codex --config=/config/config.yaml
 
 auth2api-status: ## статус аккаунтов auth2api
-	$(COMPOSE) exec auth2api wget -qO- --header="Authorization: Bearer auth2api-internal-key" http://localhost:8317/admin/accounts
+	$(C) $(LOCAL) exec auth2api wget -qO- \
+	  --header="Authorization: Bearer auth2api-internal-key" \
+	  http://localhost:8317/admin/accounts
 
-# ── модели ────────────────────────────────────────────────────
+# ── конфиги ───────────────────────────────────────────────────────────────────
 
-sync-models:   ## обновить opencode.json из litellm/config.yaml
-	bash scripts/sync_models.sh
+generate:       ## сгенерировать configs/ из config.prod.yml
+	go run ./scripts/generate/ ENV=prod
 
-validate-models: ## проверить что litellm и opencode синхронизированы
-	bash scripts/sync_models.sh --check
+generate-local: ## сгенерировать configs/ из config.local.yml
+	go run ./scripts/generate/ ENV=local
 
-# ── прочее ────────────────────────────────────────────────────
+opencode:       ## opencode с прод-окружением (.env.prod)
+	env $$(grep -v '^[#$$]' .env.prod | xargs) opencode
 
-install-hooks: ## установить git pre-commit хук
-	cp scripts/pre-commit .git/hooks/pre-commit
-	chmod +x .git/hooks/pre-commit
-	@echo "pre-commit hook installed"
+opencode-local: ## opencode с локальным окружением (.env.local)
+	env $$(grep -v '^[#$$]' .env.local | xargs) opencode
 
-clean:         ## снести всё включая volumes
-	$(COMPOSE) down -v
+# ── справка ───────────────────────────────────────────────────────────────────
 
-help:          ## показать все команды
+help:           ## показать все команды
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'

@@ -1,2 +1,7 @@
 .env
+.env.local
+.env.prod
 .idea
+
+# генерируется из config.yml — make generate / make generate-local
+configs/
