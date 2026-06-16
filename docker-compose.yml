@@ -6,8 +6,8 @@ services:
     user: root
     command: server start-dev --ip 0.0.0.0 --db-filename /temporal-data/temporal.db --log-level warn
     ports:
-      - "7233:7233"   # gRPC frontend
-      - "8233:8233"   # Web UI
+      - "7233:7233"
+      - "8233:8233"
     volumes:
       - temporal-data:/temporal-data
     networks: [pipeline-net]
@@ -37,7 +37,7 @@ services:
     image: ghcr.io/berriai/litellm:main-stable
     command: ["--config", "/app/config.yml"]
     ports:
-      - "4000:4000"   # OpenAI-compatible API + dashboard at /ui
+      - "4000:4000"
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
@@ -46,7 +46,6 @@ services:
       PYTHONHTTPSVERIFY: "0"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
@@ -55,6 +54,8 @@ services:
     depends_on:
       litellm-db:
         condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
     networks: [pipeline-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
@@ -62,6 +63,25 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  vault-mcp:
+    build:
+      context: ./mcp/vcs-vault-local
+      dockerfile: Dockerfile
+    environment:
+      VAULT_ROOT: /vault
+      PORT: "8080"
+    volumes:
+      - ${VAULT_LOCAL_PATH}:/vault:ro
+    ports:
+      - "8080:8080"
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
   worker:
     profiles: ["worker"]
@@ -72,7 +92,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       LITELLM_BASE_URL: http://litellm:4000
-      LITELLM_API_KEY: ${LITELLM_WORKER_KEY:-${LITELLM_MASTER_KEY}}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
       GITEA_BASE_URL: ${GITEA_BASE_URL:-}
       GITEA_TOKEN: ${GITEA_TOKEN:-}
       VAULT_REPO: ${VAULT_REPO:-vcs-vault}
