@@ -1,6 +1,7 @@
 COMPOSE = docker compose
 
-.PHONY: up down logs ps vault-up vault-down vault-logs worker-up clean help
+.PHONY: up down logs ps vault-up vault-down vault-logs worker-up clean help \
+        sync-models validate-models install-hooks
 
 up:
 	$(COMPOSE) up -d
@@ -29,6 +30,17 @@ worker-up:
 clean:
 	$(COMPOSE) --profile worker down -v
 
-help:          ## показать все команды
+sync-models: 
+	bash scripts/sync_models.sh
+
+validate-models:
+	bash scripts/sync_models.sh --check
+
+install-hooks:
+	cp scripts/pre-commit .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+	@echo "pre-commit hook installed"
+
+help:
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'

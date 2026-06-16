@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Validates that litellm/config.yaml and opencode/opencode.json models are in sync.
+# Install: make install-hooks
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+# Only run if either config is staged
+if ! git diff --cached --name-only | grep -qE '(litellm/config\.yaml|opencode/opencode\.json)'; then
+  exit 0
+fi
+
+echo "checking litellm ↔ opencode model sync..."
+bash "$ROOT/scripts/sync_models.sh" --check
