@@ -18,6 +18,25 @@ services:
       retries: 6
       start_period: 5s
 
+  sc-local-mcp:
+    build:
+      context: ../mcp/vcs-sc-local
+      dockerfile: Dockerfile
+    environment:
+      REPO_ROOT: /repo
+      PORT: "8081"
+    volumes:
+      - ${SC_LOCAL_PATH:-/tmp/sc-local}:/repo:rw
+    ports:
+      - "8081:8081"
+    networks: [pipeline-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
 networks:
   pipeline-net:
     name: pipeline-net

@@ -6,3 +6,9 @@
 # генерируется из config.yml — make generate / make generate-local
 configs/
 opencode.json
+
+# Go binaries
+mcp/vcs-vault-local/vault-mcp
+mcp/vcs-sc-local/sc-local-mcp
+worker/worker
+scripts/generate/generate

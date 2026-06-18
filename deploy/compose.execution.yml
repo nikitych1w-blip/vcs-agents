@@ -3,18 +3,25 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
     environment:
       TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
-      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
-      GITEA_BASE_URL: ${GITEA_BASE_URL:-}
-      GITEA_TOKEN: ${GITEA_TOKEN:-}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      SC_LOCAL_MCP_URL: ${SC_LOCAL_MCP_URL:-http://sc-local-mcp:8081/mcp}
+      SC_BASE_URL: ${SC_BASE_URL:-}
+      SC_TOKEN: ${SC_TOKEN:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       temporal:
         condition: service_healthy
       litellm:
+        condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
+      sc-local-mcp:
         condition: service_healthy
     networks: [pipeline-net]
     restart: unless-stopped

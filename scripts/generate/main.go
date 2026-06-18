@@ -21,13 +21,14 @@ const fileHeader = "# Generated from config.%s.yml — do not edit manually\n"
 // ── config structs ────────────────────────────────────────────────────────────
 
 type Config struct {
-	DefaultModel string             `yaml:"default_model"`
-	Models       map[string]Model   `yaml:"models"`
+	DefaultModel string              `yaml:"default_model"`
+	Models       map[string]Model    `yaml:"models"`
 	Providers    map[string]Provider `yaml:"providers"`
-	MCP          ConfigMCP          `yaml:"mcp"`
-	LiteLLM      LiteLLMCfg        `yaml:"litellm"`
-	OpenCode     OpenCodeCfg        `yaml:"opencode"`
-	Auth2API     *Auth2APICfg       `yaml:"auth2api"` // nil in prod
+	MCP          ConfigMCP           `yaml:"mcp"`
+	LiteLLM      LiteLLMCfg         `yaml:"litellm"`
+	OpenCode     OpenCodeCfg         `yaml:"opencode"`
+	Auth2API     *Auth2APICfg        `yaml:"auth2api"` // nil in prod
+	Worker       WorkerCfg           `yaml:"worker"`
 }
 
 type Model struct {
@@ -88,6 +89,11 @@ type Auth2APICfg struct {
 		CLIVersion string `yaml:"cli_version"`
 		Entrypoint string `yaml:"entrypoint"`
 	} `yaml:"cloaking"`
+}
+
+type WorkerCfg struct {
+	TemporalNamespace string `yaml:"temporal_namespace"`
+	VaultMCPURLEnv    string `yaml:"vault_mcp_url_env"`
 }
 
 // ── output structs ────────────────────────────────────────────────────────────
@@ -282,6 +288,19 @@ func genOpenCode(cfg Config, env string) (string, error) {
 	return string(b) + "\n", nil
 }
 
+// genWorker produces configs/worker/config.generated.env with static (non-secret)
+// worker settings. Secrets (TEMPORAL_ADDRESS, LITELLM_API_KEY, VAULT_MCP_URL, etc.)
+// stay in .env.local and are injected via compose environment: block.
+func genWorker(cfg Config, env string) (string, error) {
+	ns := cfg.Worker.TemporalNamespace
+	if ns == "" {
+		ns = "default"
+	}
+	return fmt.Sprintf(fileHeader, env) +
+		fmt.Sprintf("TEMPORAL_NAMESPACE=%s\n", ns) +
+		fmt.Sprintf("DEFAULT_MODEL=%s\n", cfg.DefaultModel), nil
+}
+
 // ── orchestration ─────────────────────────────────────────────────────────────
 
 type artifact struct {
@@ -312,6 +331,14 @@ func build(cfg Config, env, root string) ([]artifact, error) {
 			return nil, fmt.Errorf("auth2api: %w", err)
 		}
 		arts = append(arts, artifact{filepath.Join(base, "auth2api", "config.generated.yaml"), a2})
+	}
+
+	if cfg.Worker.TemporalNamespace != "" {
+		wk, err := genWorker(cfg, env)
+		if err != nil {
+			return nil, fmt.Errorf("worker: %w", err)
+		}
+		arts = append(arts, artifact{filepath.Join(base, "worker", "config.generated.env"), wk})
 	}
 
 	return arts, nil

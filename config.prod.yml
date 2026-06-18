@@ -60,14 +60,13 @@ opencode:
 
 # ─── Worker ──────────────────────────────────────────────────────────────────
 worker:
-  temporal_address_env: TEMPORAL_ADDRESS
   temporal_namespace: default
+  vault_mcp_url_env: VAULT_MCP_URL
+  # sc_local_mcp_url_env не нужен в проде — там sc-local-mcp не поднимается
+  # Секреты/env — в .env.prod
+  temporal_address_env: TEMPORAL_ADDRESS
   litellm_base_url_env: WORKER_LITELLM_BASE_URL
   litellm_api_key_env: LITELLM_MASTER_KEY
-  vault_repo: vcs-vault
-  vault_ref: main
-  api_repo: vcs-api
-  api_ref: main
-  gitea_base_url_env: GITEA_BASE_URL
-  gitea_token_env: GITEA_TOKEN
+  sc_base_url_env: SC_BASE_URL
+  sc_token_env: SC_TOKEN
   otel_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT

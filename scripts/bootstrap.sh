@@ -88,6 +88,12 @@ if [[ "$ENV" == "local" ]]; then
   if [[ ! -d "${VAULT_LOCAL_PATH:-}" ]]; then
     die "VAULT_LOCAL_PATH=${VAULT_LOCAL_PATH:-} не существует или не является директорией"
   fi
+  # SC_LOCAL_PATH опционален — если не задан, sc-local-mcp пишет в /tmp/sc-local
+  if [[ -z "${SC_LOCAL_PATH:-}" ]]; then
+    warn "SC_LOCAL_PATH не задан — артефакты воркера пойдут в /tmp/sc-local"
+  elif [[ ! -d "${SC_LOCAL_PATH}" ]]; then
+    warn "SC_LOCAL_PATH=${SC_LOCAL_PATH} не существует — создай директорию или задай путь к клону репо"
+  fi
 fi
 
 success "${ENV_FILE} в порядке"
@@ -99,30 +105,52 @@ make "generate${ENV:+"-$([[ "$ENV" == "local" ]] && echo local || true)"}" 2>/de
   || { [[ "$ENV" == "local" ]] && make generate-local || make generate; }
 success "конфиги сгенерированы в configs/"
 
+# Определяем режим auth2api по наличию сгенерированного конфига.
+# Режим: claude | codex | none (без auth2api — только SBT-модели)
+AUTH2API_CFG="configs/auth2api/config.generated.yaml"
+AUTH2API_MODE="none"
+if [[ -f "$AUTH2API_CFG" ]]; then
+  if grep -q "entrypoint: codex" "$AUTH2API_CFG" 2>/dev/null; then
+    AUTH2API_MODE="codex"
+  else
+    AUTH2API_MODE="claude"
+  fi
+fi
+
 # ── 5. запуск стека ───────────────────────────────────────────────────────────
 
-info "поднимаю стек..."
+info "поднимаю стек (auth2api: ${AUTH2API_MODE})..."
 if [[ "$ENV" == "local" ]]; then
-  make up-local
+  if [[ "$AUTH2API_MODE" != "none" ]]; then
+    make up-local
+  else
+    make up-local-bare
+  fi
 else
   make up
 fi
 success "контейнеры запущены"
 
-# ── 5a. проверка auth2api (только local) ──────────────────────────────────────
+# ── 5a. проверка auth2api (только local, только когда включён) ────────────────
 
-if [[ "$ENV" == "local" ]]; then
+if [[ "$ENV" == "local" && "$AUTH2API_MODE" != "none" ]]; then
   sleep 3
   if ! docker ps --filter "name=auth2api" --filter "status=running" | grep -q auth2api; then
     echo ""
-    warn "auth2api не запустился — нужно войти в Claude (один раз):"
-    echo ""
-    echo "    make auth2api-login"
+    if [[ "$AUTH2API_MODE" == "codex" ]]; then
+      warn "auth2api не запустился — нужно войти в Codex/ChatGPT (один раз):"
+      echo ""
+      echo "    make auth2api-login-codex"
+    else
+      warn "auth2api не запустился — нужно войти в Claude (один раз):"
+      echo ""
+      echo "    make auth2api-login"
+    fi
     echo ""
     info "после авторизации auth2api поднимется автоматически (restart: on-failure)"
     echo ""
   else
-    success "auth2api запущен"
+    success "auth2api запущен (${AUTH2API_MODE})"
   fi
 fi
 
@@ -172,12 +200,26 @@ if [[ "$ENV" == "local" ]]; then
   echo ""
   echo "  запусти opencode:"
   echo "    make opencode-local"
+  if [[ "$AUTH2API_MODE" == "codex" ]]; then
+    echo ""
+    echo "  первый вход в Codex/ChatGPT (один раз):"
+    echo "    make auth2api-login-codex"
+  elif [[ "$AUTH2API_MODE" == "claude" ]]; then
+    echo ""
+    echo "  первый вход в Claude (один раз):"
+    echo "    make auth2api-login"
+  fi
   echo ""
-  echo "  первый вход в Claude (один раз):"
-  echo "    make auth2api-login"
+  echo "  запусти воркер (опционально):"
+  echo "    make worker-up"
+  echo "    CHANGE_ID=vcs-00000 SPEC_NAME=repos-search make run-spec"
 else
   echo ""
   echo "  запусти opencode:"
   echo "    make opencode"
+  echo ""
+  echo "  запусти воркер (опционально):"
+  echo "    make worker-up"
+  echo "    CHANGE_ID=vcs-00000 SPEC_NAME=repos-search make run-spec"
 fi
 echo ""

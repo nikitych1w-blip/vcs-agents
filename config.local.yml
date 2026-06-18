@@ -71,7 +71,11 @@ opencode:
   litellm_api_key_env: LITELLM_API_KEY
   litellm_mcp_url_env: LITELLM_MCP_URL
 
-# ─── auth2api (Claude OAuth прокси) ──────────────────────────────────────────
+# ─── auth2api (OAuth прокси) ─────────────────────────────────────────────────
+# Три режима:
+#   claude  — entrypoint: cli    → make auth2api-login         (по умолчанию)
+#   codex   — entrypoint: codex  → make auth2api-login-codex
+#   none    — удали всю эту секцию и запускай через make up-local-bare
 auth2api:
   port: 8317
   api_key: auth2api-internal-key
@@ -81,18 +85,17 @@ auth2api:
     count_tokens_ms: 30000
   cloaking:
     cli_version: "2.1.153"
-    entrypoint: cli
+    entrypoint: cli   # ← сменить на: codex
 
 # ─── Worker ──────────────────────────────────────────────────────────────────
 worker:
-  temporal_address_env: TEMPORAL_ADDRESS
   temporal_namespace: default
+  vault_mcp_url_env: VAULT_LOCAL_MCP_URL
+  sc_local_mcp_url_env: SC_LOCAL_MCP_URL
+  # Secrets/env passed via .env.local — documented here for discoverability
+  temporal_address_env: TEMPORAL_ADDRESS
   litellm_base_url_env: WORKER_LITELLM_BASE_URL
   litellm_api_key_env: LITELLM_MASTER_KEY
-  vault_repo: vcs-vault
-  vault_ref: main
-  api_repo: vcs-api
-  api_ref: main
-  gitea_base_url_env: GITEA_BASE_URL
-  gitea_token_env: GITEA_TOKEN
+  sc_base_url_env: SC_BASE_URL
+  sc_token_env: SC_TOKEN
   otel_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT

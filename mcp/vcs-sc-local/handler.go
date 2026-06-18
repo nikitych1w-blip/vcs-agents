@@ -6,8 +6,6 @@ import (
 	"net/http"
 )
 
-// ── JSON-RPC 2.0 types ─────────────────────────────────────────────────────
-
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      any             `json:"id"`
@@ -26,8 +24,6 @@ type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
-
-// ── MCP protocol types ──────────────────────────────────────────────────────
 
 type initResult struct {
 	ProtocolVersion string       `json:"protocolVersion"`
@@ -81,92 +77,59 @@ type content struct {
 	Text string `json:"text"`
 }
 
-// ── Handler ─────────────────────────────────────────────────────────────────
-
 type Handler struct {
-	vault *VaultReader
+	repo  *RepoWriter
 	tools []tool
 }
 
-func NewHandler(vault *VaultReader) *Handler {
+func NewHandler(repo *RepoWriter) *Handler {
 	return &Handler{
-		vault: vault,
+		repo: repo,
 		tools: []tool{
 			{
-				Name:        "read_skill",
-				Description: "Read a skill file from vcs-vault by skill ID. Returns the full markdown content.",
+				Name:        "write_file",
+				Description: "Write (create or overwrite) a file at the given path inside the local repo. Parent directories are created automatically.",
 				InputSchema: inputSchema{
 					Type: "object",
 					Properties: map[string]property{
-						"skill_id": {
+						"path": {
 							Type:        "string",
-							Description: "Skill identifier, e.g. 'go-http-server' (maps to skills/go-http-server.md)",
+							Description: "Relative file path inside the repo, e.g. 'src/api/routes.yaml'",
+						},
+						"content": {
+							Type:        "string",
+							Description: "Full text content to write to the file",
 						},
 					},
-					Required: []string{"skill_id"},
+					Required: []string{"path", "content"},
 				},
 			},
 			{
-				Name:        "list_openspec_changes",
-				Description: "List all openspec changes in vcs-vault. Returns change IDs, their roles and available spec names.",
-				InputSchema: inputSchema{
-					Type:       "object",
-					Properties: map[string]property{},
-					Required:   []string{},
-				},
-			},
-			{
-				Name:        "read_openspec_proposal",
-				Description: "Read the proposal (intent contract) for an openspec change. Contains business intent, success metrics, capabilities and impact.",
+				Name:        "read_file",
+				Description: "Read the contents of a file inside the local repo.",
 				InputSchema: inputSchema{
 					Type: "object",
 					Properties: map[string]property{
-						"change_id": {
+						"path": {
 							Type:        "string",
-							Description: "Change identifier, e.g. 'vcs-00000'",
-						},
-						"role": {
-							Type:        "string",
-							Description: "Role subdirectory, e.g. 'sa'. Omit to auto-detect.",
+							Description: "Relative file path inside the repo",
 						},
 					},
-					Required: []string{"change_id"},
+					Required: []string{"path"},
 				},
 			},
 			{
-				Name:        "read_openspec_spec",
-				Description: "Read a specific spec file (requirements with SHALL statements and scenarios) for an openspec change.",
+				Name:        "list_files",
+				Description: "List files and directories at the given path inside the local repo. Defaults to the repo root.",
 				InputSchema: inputSchema{
 					Type: "object",
 					Properties: map[string]property{
-						"change_id": {
+						"path": {
 							Type:        "string",
-							Description: "Change identifier, e.g. 'vcs-00000'",
-						},
-						"spec_name": {
-							Type:        "string",
-							Description: "Spec name, e.g. 'repos-search'",
-						},
-						"role": {
-							Type:        "string",
-							Description: "Role subdirectory, e.g. 'sa'. Omit to auto-detect.",
+							Description: "Relative directory path to list. Omit to list the repo root.",
 						},
 					},
-					Required: []string{"change_id", "spec_name"},
-				},
-			},
-			{
-				Name:        "search_knowledge",
-				Description: "Search knowledge base files in vcs-vault for a given query string. Returns matching file paths and content snippets.",
-				InputSchema: inputSchema{
-					Type: "object",
-					Properties: map[string]property{
-						"query": {
-							Type:        "string",
-							Description: "Search query — matched against file names and content (case-insensitive)",
-						},
-					},
-					Required: []string{"query"},
+					Required: []string{},
 				},
 			},
 		},
@@ -186,7 +149,6 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("mcp | method=%s id=%v", req.Method, req.ID)
-
 	w.Header().Set("Content-Type", "application/json")
 
 	switch req.Method {
@@ -194,11 +156,10 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, req.ID, initResult{
 			ProtocolVersion: "2025-03-26",
 			Capabilities:    capabilities{Tools: &toolsCap{}},
-			ServerInfo:      serverInfo{Name: "vcs-vault-local-mcp", Version: "0.1.0"},
+			ServerInfo:      serverInfo{Name: "vcs-sc-local-mcp", Version: "0.1.0"},
 		})
 
 	case "notifications/initialized":
-		// notification — no response
 		w.WriteHeader(http.StatusAccepted)
 
 	case "tools/list":
@@ -226,11 +187,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeResult(w http.ResponseWriter, id any, result any) {
-	_ = json.NewEncoder(w).Encode(rpcResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Result:  result,
-	})
+	_ = json.NewEncoder(w).Encode(rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
 func writeError(w http.ResponseWriter, id any, code int, msg string) {
