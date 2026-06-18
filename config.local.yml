@@ -44,6 +44,12 @@ providers:
 mcp:
   vault:
     url_env: VAULT_LOCAL_MCP_URL
+    opencode_url_env: VAULT_EXTERNAL_MCP_URL
+    transport: http
+    auth_type: none
+  sc_local:
+    url_env: SC_LOCAL_MCP_URL
+    opencode_url_env: SC_LOCAL_EXTERNAL_MCP_URL
     transport: http
     auth_type: none
 

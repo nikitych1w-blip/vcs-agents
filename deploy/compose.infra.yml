@@ -51,6 +51,8 @@ services:
       VAULT_LOCAL_MCP_URL: ${VAULT_LOCAL_MCP_URL:-}
       VAULT_MCP_URL: ${VAULT_MCP_URL:-}
       VAULT_MCP_TOKEN: ${VAULT_MCP_TOKEN:-}
+      # ── SC local MCP ────────────────────────────────────────────
+      SC_LOCAL_MCP_URL: ${SC_LOCAL_MCP_URL:-}
       # ── Observability ───────────────────────────────────────────
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
@@ -62,6 +64,9 @@ services:
         condition: service_healthy
       vault-mcp:
         condition: service_healthy
+      sc-local-mcp:
+        condition: service_healthy
+        required: false
     networks: [pipeline-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]

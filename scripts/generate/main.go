@@ -43,15 +43,14 @@ type Provider struct {
 	APIKey     string `yaml:"api_key"`
 }
 
-type ConfigMCP struct {
-	Vault MCPServer `yaml:"vault"`
-}
+type ConfigMCP map[string]MCPServer
 
 type MCPServer struct {
-	URLEnv    string `yaml:"url_env"`
-	Transport string `yaml:"transport"`
-	AuthType  string `yaml:"auth_type"`
-	TokenEnv  string `yaml:"token_env"`
+	URLEnv        string `yaml:"url_env"`         // docker-internal URL (LiteLLM, workers)
+	OpenCodeURLEnv string `yaml:"opencode_url_env"` // external URL for opencode (localhost)
+	Transport     string `yaml:"transport"`
+	AuthType      string `yaml:"auth_type"`
+	TokenEnv      string `yaml:"token_env"`
 }
 
 type LiteLLMCfg struct {
@@ -184,20 +183,29 @@ func genLiteLLM(cfg Config, env string) (string, error) {
 		})
 	}
 
-	vault := cfg.MCP.Vault
-	mcpEntry := liteLLMMCP{
-		URL:       osEnv(vault.URLEnv),
-		Transport: vault.Transport,
-		AuthType:  vault.AuthType,
+	mcpServers := make(map[string]liteLLMMCP, len(cfg.MCP))
+	mcpNames := make([]string, 0, len(cfg.MCP))
+	for name := range cfg.MCP {
+		mcpNames = append(mcpNames, name)
 	}
-	if vault.TokenEnv != "" {
-		mcpEntry.Token = osEnv(vault.TokenEnv)
+	sort.Strings(mcpNames)
+	for _, name := range mcpNames {
+		srv := cfg.MCP[name]
+		entry := liteLLMMCP{
+			URL:       osEnv(srv.URLEnv),
+			Transport: srv.Transport,
+			AuthType:  srv.AuthType,
+		}
+		if srv.TokenEnv != "" {
+			entry.Token = osEnv(srv.TokenEnv)
+		}
+		mcpServers[name+"_mcp"] = entry
 	}
 
 	g := cfg.LiteLLM.General
 	out := liteLLMOut{
 		ModelList:       models,
-		MCPServers:      map[string]liteLLMMCP{"vault_mcp": mcpEntry},
+		MCPServers:      mcpServers,
 		RouterSettings:  cfg.LiteLLM.Router,
 		LiteLLMSettings: cfg.LiteLLM.Settings,
 		GeneralSettings: liteLLMGeneral{
@@ -255,6 +263,35 @@ func genOpenCode(cfg Config, env string) (string, error) {
 		models[name] = map[string]string{"name": cfg.Models[name].Display}
 	}
 
+	mcpBlock := map[string]any{
+		"litellm": map[string]any{
+			"type":    "remote",
+			"url":     ocEnv(oc.LiteLLMMCPURLEnv),
+			"enabled": true,
+			"headers": map[string]string{
+				"x-litellm-api-key": "Bearer " + ocEnv(apiKeyEnv),
+			},
+		},
+	}
+	// Add each MCP server that has an opencode_url_env configured.
+	mcpNames := make([]string, 0, len(cfg.MCP))
+	for name := range cfg.MCP {
+		mcpNames = append(mcpNames, name)
+	}
+	sort.Strings(mcpNames)
+	for _, name := range mcpNames {
+		srv := cfg.MCP[name]
+		if srv.OpenCodeURLEnv == "" {
+			continue
+		}
+		entry := map[string]any{
+			"type":    "remote",
+			"url":     ocEnv(srv.OpenCodeURLEnv),
+			"enabled": true,
+		}
+		mcpBlock[name] = entry
+	}
+
 	out := map[string]any{
 		"$schema": "https://opencode.ai/config.json",
 		"model":   "litellm/" + cfg.DefaultModel,
@@ -269,16 +306,7 @@ func genOpenCode(cfg Config, env string) (string, error) {
 				"models": models,
 			},
 		},
-		"mcp": map[string]any{
-			"litellm": map[string]any{
-				"type":    "remote",
-				"url":     ocEnv(oc.LiteLLMMCPURLEnv),
-				"enabled": true,
-				"headers": map[string]string{
-					"x-litellm-api-key": "Bearer " + ocEnv(apiKeyEnv),
-				},
-			},
-		},
+		"mcp": mcpBlock,
 	}
 
 	b, err := json.MarshalIndent(out, "", "  ")
