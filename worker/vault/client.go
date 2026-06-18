@@ -126,3 +126,15 @@ func (c *Client) ReadSkill(ctx context.Context, skillID string) (string, error) 
 func (c *Client) SearchKnowledge(ctx context.Context, query string) (string, error) {
 	return c.callTool(ctx, "search_knowledge", map[string]any{"query": query})
 }
+
+func (c *Client) ReadSchema(ctx context.Context, schema string) (string, error) {
+	args := map[string]any{}
+	if schema != "" {
+		args["schema"] = schema
+	}
+	return c.callTool(ctx, "read_schema", args)
+}
+
+func (c *Client) ReadStepPrompt(ctx context.Context, stepName string) (string, error) {
+	return c.callTool(ctx, "read_step_prompt", map[string]any{"step_name": stepName})
+}

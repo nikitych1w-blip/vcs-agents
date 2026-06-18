@@ -1,4 +1,5 @@
 services:
+  # Orchestrator: registers the workflow and handles FetchConfig/ReadSpec activities.
   worker:
     build:
       context: ..
@@ -11,9 +12,9 @@ services:
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
       VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
       SC_LOCAL_MCP_URL: ${SC_LOCAL_MCP_URL:-http://sc-local-mcp:8081/mcp}
-      SC_BASE_URL: ${SC_BASE_URL:-}
-      SC_TOKEN: ${SC_TOKEN:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      WORKER_ROLE: orchestrator
+      WORKER_QUEUE: openspec-execute
+      REGISTER_WORKFLOW: "true"
     depends_on:
       temporal:
         condition: service_healthy
@@ -22,6 +23,122 @@ services:
       vault-mcp:
         condition: service_healthy
       sc-local-mcp:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+  worker-sa:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
+      LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      WORKER_ROLE: SA
+      WORKER_QUEUE: openspec-sa
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+  # Scale with: docker compose ... up --scale worker-be=3
+  worker-be:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
+      LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      WORKER_ROLE: BE
+      WORKER_QUEUE: openspec-be
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+  worker-fe:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
+      LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      WORKER_ROLE: FE
+      WORKER_QUEUE: openspec-fe
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+  worker-qa:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
+      LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      WORKER_ROLE: QA
+      WORKER_QUEUE: openspec-qa
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      vault-mcp:
+        condition: service_healthy
+    networks: [pipeline-net]
+    restart: unless-stopped
+
+  worker-qaa:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../configs/worker/config.generated.env
+    environment:
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS}
+      LITELLM_BASE_URL: ${WORKER_LITELLM_BASE_URL}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      VAULT_MCP_URL: ${VAULT_MCP_URL:-http://vault-mcp:8080/mcp}
+      WORKER_ROLE: QAA
+      WORKER_QUEUE: openspec-qaa
+    depends_on:
+      temporal:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      vault-mcp:
         condition: service_healthy
     networks: [pipeline-net]
     restart: unless-stopped

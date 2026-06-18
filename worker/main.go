@@ -13,13 +13,16 @@ import (
 )
 
 func main() {
-	temporalAddr := env("TEMPORAL_ADDRESS", "localhost:7233")
-	temporalNS   := env("TEMPORAL_NAMESPACE", "default")
-	litellmURL   := env("LITELLM_BASE_URL", "http://localhost:4000")
-	litellmKey   := env("LITELLM_API_KEY", "")
-	vaultMCPURL  := env("VAULT_MCP_URL", "http://localhost:8080/mcp")
-	scMCPURL     := env("SC_LOCAL_MCP_URL", "")
-	defaultModel := env("DEFAULT_MODEL", "company-main")
+	temporalAddr  := env("TEMPORAL_ADDRESS", "localhost:7233")
+	temporalNS    := env("TEMPORAL_NAMESPACE", "default")
+	litellmURL    := env("LITELLM_BASE_URL", "http://localhost:4000")
+	litellmKey    := env("LITELLM_API_KEY", "")
+	vaultMCPURL   := env("VAULT_MCP_URL", "http://localhost:8080/mcp")
+	scMCPURL      := env("SC_LOCAL_MCP_URL", "")
+	defaultModel  := env("DEFAULT_MODEL", "company-main")
+	role          := env("WORKER_ROLE", "orchestrator") // SA, BE, FE, QA, QAA, orchestrator
+	queue         := env("WORKER_QUEUE", TaskQueue)
+	registerWF    := env("REGISTER_WORKFLOW", "")
 
 	c, err := client.Dial(client.Options{
 		HostPort:  temporalAddr,
@@ -43,12 +46,17 @@ func main() {
 		defaultModel: defaultModel,
 	}
 
-	w := worker.New(c, TaskQueue, worker.Options{})
-	w.RegisterWorkflow(ExecuteOpenSpecWorkflow)
+	w := worker.New(c, queue, worker.Options{})
+
+	// Workflow is registered only on the orchestrator or when explicitly requested.
+	if role == "orchestrator" || registerWF == "true" {
+		w.RegisterWorkflow(ExecuteOpenSpecWorkflow)
+	}
+
 	w.RegisterActivity(acts)
 
-	log.Printf("worker | temporal=%s namespace=%s queue=%s vault=%s",
-		temporalAddr, temporalNS, TaskQueue, vaultMCPURL)
+	log.Printf("worker | role=%s queue=%s temporal=%s namespace=%s vault=%s",
+		role, queue, temporalAddr, temporalNS, vaultMCPURL)
 
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		log.Fatalf("worker run: %v", err)

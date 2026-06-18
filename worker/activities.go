@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 
+	"github.com/nikitych1w-blip/vcs-agents/worker/dag"
 	"github.com/nikitych1w-blip/vcs-agents/worker/llm"
 	"github.com/nikitych1w-blip/vcs-agents/worker/openspec"
 	"github.com/nikitych1w-blip/vcs-agents/worker/sc"
@@ -157,6 +158,104 @@ func (a *Activities) WriteFiles(ctx context.Context, input WriteFilesInput) (Wri
 
 	logger.Info("artifact written", "path", input.Path, "bytes", len(input.Content), "msg", msg)
 	return WriteFilesResult{Path: input.Path, Bytes: len(input.Content)}, nil
+}
+
+// ── pipeline activities ───────────────────────────────────────────────────────
+
+// FetchConfigInput carries the git ref to pin the config (empty → "main").
+type FetchConfigInput struct {
+	Ref string
+}
+
+// FetchConfig reads openspec/schemas/vcs/schema.yaml from vault via MCP.
+// Returns the raw YAML so the workflow can parse it deterministically.
+func (a *Activities) FetchConfig(ctx context.Context, input FetchConfigInput) (string, error) {
+	logger := activity.GetLogger(ctx)
+	schema := input.Ref
+	if schema == "" {
+		schema = "vcs"
+	}
+	logger.Info("fetching schema", "schema", schema)
+
+	cfg, err := a.vault.ReadSchema(ctx, schema)
+	if err != nil {
+		return "", fmt.Errorf("vault ReadSchema: %w", err)
+	}
+	return cfg, nil
+}
+
+// RunStepInput carries everything needed to execute one pipeline step.
+type RunStepInput struct {
+	Step     dag.Step          `json:"step"`
+	ChangeID string            `json:"change_id"`
+	SpecName string            `json:"spec_name"`
+	Spec     openspec.Spec     `json:"spec"`
+	Context  map[string]string `json:"context"` // accumulated artifacts from prior waves
+	Model    string            `json:"model"`
+}
+
+// RunStepResult is the artifact produced by a single step.
+type RunStepResult struct {
+	StepName string `json:"step_name"`
+	Content  string `json:"content"`
+}
+
+// RunStep fetches the role system prompt from config.yaml, combines it with
+// the step instruction (from schema.yaml, already embedded in Step.Config),
+// and calls the LLM.
+func (a *Activities) RunStep(ctx context.Context, input RunStepInput) (RunStepResult, error) {
+	logger := activity.GetLogger(ctx)
+	logger.Info("running step", "step", input.Step.Name)
+
+	rolePrompt, err := a.vault.ReadStepPrompt(ctx, input.Step.Name)
+	if err != nil {
+		return RunStepResult{}, fmt.Errorf("read step prompt %q: %w", input.Step.Name, err)
+	}
+
+	prompt := buildStepPrompt(rolePrompt, input)
+
+	model := input.Model
+	if model == "" {
+		model = a.defaultModel
+	}
+
+	content, err := a.llm.Chat(ctx, model, []llm.Message{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return RunStepResult{}, fmt.Errorf("llm chat: %w", err)
+	}
+
+	logger.Info("step complete", "step", input.Step.Name, "chars", len(content))
+	return RunStepResult{StepName: input.Step.Name, Content: content}, nil
+}
+
+// buildStepPrompt combines role context (config.yaml) + schema instruction + spec + prior artifacts.
+func buildStepPrompt(rolePrompt string, input RunStepInput) string {
+	var sb strings.Builder
+
+	sb.WriteString(rolePrompt)
+
+	if input.Step.Config.Instruction != "" {
+		sb.WriteString("\n\n---\n\n## Задача\n\n")
+		sb.WriteString(input.Step.Config.Instruction)
+	}
+
+	sb.WriteString(fmt.Sprintf("\n\nИзменение: **%s** (ID: %s)\n", input.SpecName, input.ChangeID))
+
+	if input.Spec.Content != "" {
+		sb.WriteString("\n## Спецификация\n\n")
+		sb.WriteString(input.Spec.Content)
+	}
+
+	if len(input.Context) > 0 {
+		sb.WriteString("\n\n## Артефакты предыдущих шагов\n")
+		for name, artifact := range input.Context {
+			fmt.Fprintf(&sb, "\n### %s\n\n%s\n", name, artifact)
+		}
+	}
+
+	return sb.String()
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

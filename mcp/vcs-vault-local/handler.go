@@ -169,6 +169,34 @@ func NewHandler(vault *VaultReader) *Handler {
 					Required: []string{"query"},
 				},
 			},
+			{
+				Name:        "read_schema",
+				Description: "Read openspec schema.yaml from vcs-vault. Returns artifact definitions with id, generates, instruction and requires (DAG topology).",
+				InputSchema: inputSchema{
+					Type: "object",
+					Properties: map[string]property{
+						"schema": {
+							Type:        "string",
+							Description: "Schema name, e.g. 'vcs'. Defaults to 'vcs' when omitted.",
+						},
+					},
+					Required: []string{},
+				},
+			},
+			{
+				Name:        "read_step_prompt",
+				Description: "Read the system prompt for a pipeline step from openspec/config.yaml. Joins shared context with step-specific role instructions.",
+				InputSchema: inputSchema{
+					Type: "object",
+					Properties: map[string]property{
+						"step_name": {
+							Type:        "string",
+							Description: "Step name as defined in pipeline.yaml, e.g. 'proposal', 'sa-specs', 'be-design'",
+						},
+					},
+					Required: []string{"step_name"},
+				},
+			},
 		},
 	}
 }

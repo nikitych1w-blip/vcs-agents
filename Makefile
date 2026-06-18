@@ -1,6 +1,6 @@
 D  = deploy
 C  = docker compose
-EF = --env-file .env.$(or $(ENV),prod)
+EF = --env-file .env.$(or $(ENV),local)
 
 # ── Compose-наборы ────────────────────────────────────────────────────────────
 # Общая база: инфраструктура (Temporal, LiteLLM, Postgres) + MCP-серверы

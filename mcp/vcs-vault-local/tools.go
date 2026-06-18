@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // VaultReader reads files from a local vcs-vault mount.
@@ -14,7 +16,7 @@ type VaultReader struct {
 	Root string // e.g. /vault (mounted from vcs-vault repo)
 }
 
-func (h *Handler) callTool(ctx context.Context, p toolCallParams) (toolCallResult, error) {
+func (h *Handler) callTool(_ context.Context, p toolCallParams) (toolCallResult, error) {
 	switch p.Name {
 	case "read_skill":
 		return h.readSkill(p.Arguments)
@@ -26,6 +28,10 @@ func (h *Handler) callTool(ctx context.Context, p toolCallParams) (toolCallResul
 		return h.readOpenSpecSpec(p.Arguments)
 	case "search_knowledge":
 		return h.searchKnowledge(p.Arguments)
+	case "read_schema":
+		return h.readSchema(p.Arguments)
+	case "read_step_prompt":
+		return h.readStepPrompt(p.Arguments)
 	default:
 		return toolCallResult{}, fmt.Errorf("unknown tool: %s", p.Name)
 	}
@@ -179,6 +185,58 @@ func (h *Handler) searchKnowledge(args map[string]any) (toolCallResult, error) {
 	}
 	return ok1(fmt.Sprintf("Found %d result(s) for %q:\n\n%s",
 		len(results), query, strings.Join(results, "\n\n---\n\n"))), nil
+}
+
+// read_schema — reads openspec/schemas/{schema}/schema.yaml.
+// Defaults to the "vcs" schema when schema param is omitted.
+func (h *Handler) readSchema(args map[string]any) (toolCallResult, error) {
+	schema, _ := stringArg(args, "schema")
+	if schema == "" {
+		schema = "vcs"
+	}
+	path := filepath.Join(h.vault.Root, "openspec", "schemas", sanitizeName(schema), "schema.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return toolCallResult{}, fmt.Errorf("schema %q not found: %w", schema, err)
+	}
+	return ok1(string(data)), nil
+}
+
+// read_step_prompt — extracts inline prompts for a given step name from openspec/config.yaml.
+// config.yaml rules are maps of step_name → []string (prompt parts joined with \n\n).
+func (h *Handler) readStepPrompt(args map[string]any) (toolCallResult, error) {
+	stepName, ok := stringArg(args, "step_name")
+	if !ok {
+		return toolCallResult{}, fmt.Errorf("step_name is required")
+	}
+
+	path := filepath.Join(h.vault.Root, "openspec", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return toolCallResult{}, fmt.Errorf("config.yaml not found: %w", err)
+	}
+
+	var cfg struct {
+		Context string              `yaml:"context"`
+		Rules   map[string][]string `yaml:"rules"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return toolCallResult{}, fmt.Errorf("parse config.yaml: %w", err)
+	}
+
+	parts, exists := cfg.Rules[stepName]
+	if !exists {
+		return toolCallResult{}, fmt.Errorf("step %q not found in config.yaml rules", stepName)
+	}
+
+	var sb strings.Builder
+	if cfg.Context != "" {
+		sb.WriteString(cfg.Context)
+		sb.WriteString("\n\n---\n\n")
+	}
+	sb.WriteString(strings.Join(parts, "\n\n"))
+
+	return ok1(sb.String()), nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
